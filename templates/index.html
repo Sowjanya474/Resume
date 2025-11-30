@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>ResumeRanker — AI-powered resume ranking</title>
+  <title>Resume Ranker</title>
 
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 
@@ -13,21 +13,18 @@
       --card:#ffffff;
       --muted:#6c757d;
       --accent:#1f2b47;
-      --accent-2:#4c638d;
       --soft:#eef3fb;
     }
 
     body{
       background:var(--bg);
       font-family: Inter, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial;
-      -webkit-font-smoothing:antialiased;
-      -moz-osx-font-smoothing:grayscale;
       margin:0;
       padding:36px 20px;
     }
 
     .brand { text-align:center; margin-bottom:28px; }
-    .brand h1{ margin:0; font-size:42px; line-height:1; color:var(--accent); font-weight:800; letter-spacing:-0.02em; }
+    .brand h1{ margin:0; font-size:42px; color:var(--accent); font-weight:800; }
     .brand p { margin:8px 0 0; color:#6b7280; font-size:16px; }
 
     .panel {
@@ -51,18 +48,71 @@
       border:0;
     }
 
+    /* upload box */
     .upload-box {
       border:2px dashed #d9e1ef;
       border-radius:10px;
-      padding:28px;
+      padding:18px;
       text-align:center;
       background:linear-gradient(180deg, rgba(255,255,255,0.6), rgba(250,251,255,0.6));
       cursor:pointer;
       transition:background .15s, border-color .15s;
+      min-height:140px;
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+      gap:12px;
+      position:relative;
+      overflow:hidden;
     }
     .upload-box.dragover { background:var(--soft); border-color:#a8c0ef; }
-    .upload-box .icon { font-size:40px; color:#8b96a8; margin-bottom:10px; }
-    .upload-box p { margin:0; color:var(--muted); }
+
+    .upload-top {
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:10px;
+      color:var(--muted);
+    }
+    .upload-top .icon { font-size:34px; color:#8b96a8; }
+
+    /* chips inside drop zone */
+    .chips {
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      justify-content:center;
+      padding:6px 12px;
+      max-height:70px;
+      overflow:auto;
+    }
+    .chip {
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      background:#f1f5f9;
+      color:#1f2937;
+      padding:6px 10px;
+      border-radius:999px;
+      font-size:13px;
+      box-shadow:0 1px 0 rgba(0,0,0,0.02);
+    }
+    .chip .remove {
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      width:18px;
+      height:18px;
+      border-radius:50%;
+      background:transparent;
+      border:0;
+      color:#6b7280;
+      cursor:pointer;
+      font-weight:700;
+      line-height:1;
+    }
+    .chip .remove:hover { color:#111827; }
+
     .small-muted { color:var(--muted); font-size:13px; margin-top:8px; }
 
     .results-empty {
@@ -99,8 +149,8 @@
 <body>
 
   <div class="brand">
-    <h1>ResumeRanker</h1>
-    <p>AI-powered resume ranking against job descriptions</p>
+    <h1>Resume Ranker</h1>
+    <p>Resume Ranking based on job descriptions</p>
   </div>
 
   <div class="panel">
@@ -109,14 +159,20 @@
       <div class="card">
         <h5 class="mb-3">Upload Resumes</h5>
 
-        <div id="dropzone" class="upload-box" tabindex="0">
-          <div class="icon">☁️</div>
-          <p><strong>Drag and drop your resume files here, or click to select files</strong></p>
-          <p class="small-muted">Supports PDF, DOC, DOCX, TXT (Max 10MB per file)</p>
+        <div id="dropzone" class="upload-box" tabindex="0" aria-label="Upload resumes. Click or drag files here.">
+          <div class="upload-top">
+            <div class="icon">☁️</div>
+            <div>
+              <div style="font-weight:700;">Drag and drop your resume files here, or click to select files</div>
+              <div class="small-muted">Supports PDF, DOC, DOCX, TXT (Max 10MB per file)</div>
+            </div>
+          </div>
+
+          <!-- chips container holds uploaded filenames -->
+          <div id="chips" class="chips" aria-live="polite"></div>
+
           <input id="fileInput" type="file" multiple accept=".pdf,.doc,.docx,.txt" style="display:none" />
         </div>
-
-        <div id="fileSummary" style="margin-top:12px; color:#334155; font-size:14px;"></div>
       </div>
 
       <div class="card">
@@ -125,7 +181,7 @@
         <div class="d-flex gap-2 mt-2">
           <button id="rankBtn" class="btn btn-primary wide">Rank Resumes</button>
         </div>
-        <div class="footer-note">Upload resumes and analyze them against a job description to see results.</div>
+       
       </div>
     </div>
 
@@ -136,7 +192,7 @@
         <div class="results-empty" id="emptyState">
           <div class="doc-icon">📄</div>
           <div style="font-weight:600;">No results yet</div>
-          <div class="small-muted" style="max-width:260px;">Upload resumes and analyze them against a job description to see results.</div>
+          <div class="small-muted" style="max-width:260px;">Upload resumes and analyze them based on job description to see results.</div>
         </div>
       </div>
     </div>
@@ -146,68 +202,97 @@
   // Elements
   const dropzone = document.getElementById('dropzone');
   const fileInput = document.getElementById('fileInput');
-  const fileSummary = document.getElementById('fileSummary');
+  const chipsEl = document.getElementById('chips');
   const rankBtn = document.getElementById('rankBtn');
   const resultsBody = document.getElementById('resultsBody');
   const emptyState = document.getElementById('emptyState');
   const jdEl = document.getElementById('jd');
 
-  let files = [];
+  // store files in a Map to allow removal by key (name+size)
+  const filesMap = new Map();
 
-  // click to open file dialog
+  // helper: unique id for a file
+  function fileKey(file){ return `${file.name}::${file.size}::${file.lastModified}`; }
+
+  // show file picker
   dropzone.addEventListener('click', () => fileInput.click());
   dropzone.addEventListener('keydown', (e) => { if(e.key === 'Enter' || e.key === ' ') fileInput.click(); });
 
-  // handle file select
+  // file input change
   fileInput.addEventListener('change', (ev) => {
-    files = Array.from(ev.target.files);
-    updateFileSummary();
+    const incoming = Array.from(ev.target.files || []);
+    addFiles(incoming);
+    fileInput.value = ''; // clear to allow same-file reselect
   });
 
   // drag events
-  ;['dragenter','dragover'].forEach(name => {
-    dropzone.addEventListener(name, (e) => {
-      e.preventDefault(); e.stopPropagation();
-      dropzone.classList.add('dragover');
-    }, false);
+  ['dragenter','dragover'].forEach(name => {
+    dropzone.addEventListener(name, (e) => { e.preventDefault(); e.stopPropagation(); dropzone.classList.add('dragover'); }, false);
   });
-  ;['dragleave','drop'].forEach(name => {
-    dropzone.addEventListener(name, (e) => {
-      e.preventDefault(); e.stopPropagation();
-      dropzone.classList.remove('dragover');
-    }, false);
+  ['dragleave','drop'].forEach(name => {
+    dropzone.addEventListener(name, (e) => { e.preventDefault(); e.stopPropagation(); dropzone.classList.remove('dragover'); }, false);
   });
   dropzone.addEventListener('drop', (e) => {
     const dt = e.dataTransfer;
     if(!dt) return;
     const dropped = Array.from(dt.files || []);
-    files = files.concat(dropped);
-    updateFileSummary();
+    addFiles(dropped);
   });
 
-  function updateFileSummary(){
-    if(!files || files.length === 0){
-      fileSummary.innerHTML = '<span class="small-muted">No files selected</span>';
+  function addFiles(list){
+    list.forEach(f => {
+      // simple validation: file type and size (10MB)
+      const max = 10 * 1024 * 1024;
+      if(f.size > max) {
+        alert(`"${f.name}" exceeds 10MB and was skipped.`);
+        return;
+      }
+      const key = fileKey(f);
+      if(!filesMap.has(key)) filesMap.set(key, f);
+    });
+    renderChips();
+  }
+
+  function removeFileByKey(key){
+    filesMap.delete(key);
+    renderChips();
+  }
+
+  function renderChips(){
+    chipsEl.innerHTML = '';
+    if(filesMap.size === 0){
+      // keep chips empty (dropbox already shows instruction)
       return;
     }
-    const lines = files.map((f) => {
-      const sizeKB = Math.round(f.size/1024);
-      return `<div style="font-size:14px; color:#2b3440">• ${escapeHtml(f.name)} <span style="color:#6b7280; font-size:13px"> — ${sizeKB} KB</span></div>`;
-    }).join('');
-    fileSummary.innerHTML = lines;
+
+    // build chip for each file
+    filesMap.forEach((file, key) => {
+      const chip = document.createElement('div');
+      chip.className = 'chip';
+      const shortName = file.name.length > 28 ? file.name.slice(0,24) + '…' : file.name;
+      chip.innerHTML = `
+        <span title="${escapeHtml(file.name)}">${escapeHtml(shortName)}</span>
+        <button type="button" class="remove" aria-label="Remove ${escapeHtml(file.name)}">&times;</button>
+      `;
+      const btn = chip.querySelector('.remove');
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        removeFileByKey(key);
+      });
+      chipsEl.appendChild(chip);
+    });
   }
 
-  function escapeHtml(s){
-    return String(s).replace(/[&<>"']/g, (m) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[m]));
-  }
+  function escapeHtml(s){ return String(s).replace(/[&<>"']/g, (m) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[m])); }
 
+  // Clear results area helper
   function clearResults(){
     resultsBody.innerHTML = '';
     resultsBody.appendChild(emptyState);
   }
 
+  // render result card (same as before)
   function renderResult(r){
-    // remove empty state if present
     if (emptyState && emptyState.parentNode) emptyState.parentNode.removeChild(emptyState);
 
     const wrapper = document.createElement('div');
@@ -245,9 +330,9 @@
     resultsBody.appendChild(wrapper);
   }
 
-  // Rank Resumes -> POST to /analyze (unchanged)
+  // Rank Resumes -> POST to /analyze (multipart)
   rankBtn.addEventListener('click', async () => {
-    if(files.length === 0){
+    if(filesMap.size === 0){
       alert('Select or drop at least one resume before ranking.');
       return;
     }
@@ -269,7 +354,11 @@
 
     const fd = new FormData();
     fd.append('jd', jdEl.value);
-    files.forEach((f) => fd.append('resumes', f, f.name));
+
+    // append files in insertion order
+    for(const f of filesMap.values()){
+      fd.append('resumes', f, f.name);
+    }
 
     try {
       const resp = await fetch('/analyze', { method:'POST', body: fd });
